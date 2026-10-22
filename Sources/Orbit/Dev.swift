@@ -12,7 +12,6 @@ enum Preview {
         let view = ZStack {
             LinearGradient(colors: [Color(red: 0.16, green: 0.22, blue: 0.30), Color(red: 0.45, green: 0.33, blue: 0.26)],
                            startPoint: .topLeading, endPoint: .bottomTrailing)
-            Circle().fill(Color.black.opacity(0.42)).frame(width: (Ring.outer.upperBound + 6) * 2)
             RingView(model: model)
         }
         .frame(width: Ring.size + 80, height: Ring.size + 80)

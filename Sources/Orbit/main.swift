@@ -61,6 +61,8 @@ final class RingController {
         p.isOpaque = false
         p.backgroundColor = .clear
         p.hasShadow = false
+        // The ring is designed for dark glass; keep it dark under a light system theme too.
+        p.appearance = NSAppearance(named: .darkAqua)
         p.level = .popUpMenu
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         p.onEscape = { [weak self] in self?.close() }
@@ -191,6 +193,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         HotKey.action = { DispatchQueue.main.async { MainActor.assumeIsolated { self.openRing() } } }
         hotKey = HotKey()
         drag.start()
+
+        // `Orbit --show <file>...` opens the ring at screen center (manual testing).
+        let args = CommandLine.arguments
+        if let i = args.firstIndex(of: "--show"), args.count > i + 1, let screen = NSScreen.main?.frame {
+            let files = args[(i + 1)...].map { URL(fileURLWithPath: $0) }
+            RingController.shared.show(files: files, at: NSPoint(x: screen.midX, y: screen.midY), takeFocus: true)
+        }
     }
 
     @objc func openRing() {

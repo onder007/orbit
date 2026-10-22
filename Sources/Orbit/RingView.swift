@@ -142,6 +142,9 @@ struct RingView: View {
         GeometryReader { geo in
             let c = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
             ZStack {
+                // Dark tint over the system glass so labels stay readable on light backgrounds.
+                Circle().fill(Color.black.opacity(0.55)).frame(width: (Ring.outer.upperBound + 6) * 2)
+
                 // Outer action petals for the active segment.
                 ForEach(Array(model.actionAngles().enumerated()), id: \.offset) { i, a in
                     let hot = model.hoverAction == i
