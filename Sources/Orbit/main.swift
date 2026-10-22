@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 import Combine
+import ServiceManagement
 import SwiftUI
 
 // MARK: - Ring window
@@ -126,12 +127,16 @@ enum Finder {
     }
 }
 
-/// Opens the ring when a file drag is in progress and Shift is held.
+/// Opens the ring when a file is picked up and held near where the drag began
+/// (press, nudge, pause), or at once with Shift. A quick drag away is a normal move: no ring.
 /// Watches the drag pasteboard instead of mouse events, which needs no Accessibility permission.
 @MainActor
 final class DragWatcher {
+    static let pause: TimeInterval = 0.25
+    static let radius: CGFloat = 90
     private var baseline = NSPasteboard(name: .drag).changeCount
     private var shownForThisDrag = false
+    private var dragStart: (at: NSPoint, time: Date)?
     private var timer: Timer?
 
     func start() {
@@ -144,6 +149,7 @@ final class DragWatcher {
         let pb = NSPasteboard(name: .drag)
         guard NSEvent.pressedMouseButtons & 1 != 0 else {
             baseline = pb.changeCount
+            dragStart = nil
             if shownForThisDrag {
                 shownForThisDrag = false
                 // Give performDragOperation a moment; close only if nothing was dropped.
@@ -153,9 +159,14 @@ final class DragWatcher {
             }
             return
         }
-        guard !shownForThisDrag, pb.changeCount != baseline, NSEvent.modifierFlags.contains(.shift) else { return }
+        guard !shownForThisDrag, pb.changeCount != baseline else { return }
+        let now = NSEvent.mouseLocation
+        guard let start = dragStart else { dragStart = (now, Date()); return }
+        // A drag that left the start area is a normal file move; stop watching it.
+        if start.at.distance(to: now) > Self.radius { baseline = pb.changeCount; dragStart = nil; return }
+        guard NSEvent.modifierFlags.contains(.shift) || Date().timeIntervalSince(start.time) >= Self.pause else { return }
         let urls = (pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]) ?? []
-        guard !urls.isEmpty else { return }
+        guard !urls.isEmpty else { baseline = pb.changeCount; return }
         shownForThisDrag = true
         RingController.shared.show(files: urls, at: NSEvent.mouseLocation, takeFocus: false)
     }
@@ -235,7 +246,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         status.button?.image = NSImage(systemSymbolName: "circle.dashed", accessibilityDescription: "Orbit")
         let menu = NSMenu()
         menu.addItem(withTitle: "Open Ring for Finder Selection  ⌥Space", action: #selector(openRing), keyEquivalent: "")
-        menu.addItem(withTitle: "Tip: press and hold a file in Finder", action: nil, keyEquivalent: "")
+        menu.addItem(withTitle: "Tip: hold a file and nudge it", action: nil, keyEquivalent: "")
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Orbit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         status.menu = menu
@@ -244,6 +255,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotKey = HotKey()
         drag.start()
         longPress.start()
+        // Start with the Mac, so the ring is always one press away.
+        if SMAppService.mainApp.status != .enabled { try? SMAppService.mainApp.register() }
 
         // `Orbit --show <file>...` opens the ring at screen center (manual testing).
         let args = CommandLine.arguments
