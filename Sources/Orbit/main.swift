@@ -43,6 +43,7 @@ final class RingController {
     private var outsideClick: Any?
     private var bag = Set<AnyCancellable>()
     var isBusy = false
+    var isOpen: Bool { panel != nil }
 
     func show(files: [URL], at point: NSPoint, takeFocus: Bool) {
         close()
@@ -160,6 +161,54 @@ final class DragWatcher {
     }
 }
 
+/// Opens the ring when a file in Finder (or on the desktop) is pressed and held.
+/// Global mouse monitors need no Accessibility permission; the files come from Finder's selection,
+/// which Finder updates on mouse down.
+@MainActor
+final class LongPressWatcher {
+    static let holdTime: TimeInterval = 0.45
+    static let slop: CGFloat = 6
+    private var monitors: [Any] = []
+    private var downAt: NSPoint?
+    private var timer: Timer?
+
+    func start() {
+        let watch: (NSEvent.EventTypeMask, @escaping () -> Void) -> Void = { mask, f in
+            if let m = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: { _ in MainActor.assumeIsolated { f() } }) {
+                self.monitors.append(m)
+            }
+        }
+        watch(.leftMouseDown) { self.pressed() }
+        watch(.leftMouseDragged) { if let d = self.downAt, d.distance(to: NSEvent.mouseLocation) > Self.slop { self.cancel() } }
+        watch(.leftMouseUp) { self.cancel() }
+    }
+
+    private func pressed() {
+        cancel()
+        guard !RingController.shared.isOpen else { return }
+        downAt = NSEvent.mouseLocation
+        timer = Timer.scheduledTimer(withTimeInterval: Self.holdTime, repeats: false) { _ in
+            MainActor.assumeIsolated { self.fire() }
+        }
+    }
+
+    private func fire() {
+        defer { cancel() }
+        guard let at = downAt, NSEvent.pressedMouseButtons & 1 != 0,
+              at.distance(to: NSEvent.mouseLocation) <= Self.slop,
+              NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.finder" else { return }
+        let files = Finder.selection()
+        guard !files.isEmpty else { return }
+        RingController.shared.show(files: files, at: at, takeFocus: false)
+    }
+
+    private func cancel() { timer?.invalidate(); timer = nil; downAt = nil }
+}
+
+extension NSPoint {
+    func distance(to p: NSPoint) -> CGFloat { hypot(x - p.x, y - p.y) }
+}
+
 /// Global ⌥Space: ring for the current Finder selection.
 final class HotKey {
     private var ref: EventHotKeyRef?
@@ -178,6 +227,7 @@ final class HotKey {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     var status: NSStatusItem!
     let drag = DragWatcher()
+    let longPress = LongPressWatcher()
     var hotKey: HotKey?
 
     func applicationDidFinishLaunching(_ n: Notification) {
@@ -185,7 +235,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         status.button?.image = NSImage(systemSymbolName: "circle.dashed", accessibilityDescription: "Orbit")
         let menu = NSMenu()
         menu.addItem(withTitle: "Open Ring for Finder Selection  ⌥Space", action: #selector(openRing), keyEquivalent: "")
-        menu.addItem(withTitle: "Tip: drag a file and hold Shift", action: nil, keyEquivalent: "")
+        menu.addItem(withTitle: "Tip: press and hold a file in Finder", action: nil, keyEquivalent: "")
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Orbit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         status.menu = menu
@@ -193,6 +243,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         HotKey.action = { DispatchQueue.main.async { MainActor.assumeIsolated { self.openRing() } } }
         hotKey = HotKey()
         drag.start()
+        longPress.start()
 
         // `Orbit --show <file>...` opens the ring at screen center (manual testing).
         let args = CommandLine.arguments
