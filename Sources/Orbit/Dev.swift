@@ -163,11 +163,11 @@ enum SelfTest {
             }
         }
         check("metadata write") {
-            let out = try Editors.writeMetadata(png, title: "T", author: "Önder", note: "c", dropGPS: true, dropAll: false)
+            let out = try Editors.writeMetadata(png, title: "T", author: "Test Author", note: "c", dropGPS: true, dropAll: false)
             let props = try ImageEngine.load(out).1
             let tiff = props[kCGImagePropertyTIFFDictionary] as? [CFString: Any]
             let pngDict = props[kCGImagePropertyPNGDictionary] as? [CFString: Any]
-            return tiff?[kCGImagePropertyTIFFArtist] as? String == "Önder" || pngDict?[kCGImagePropertyPNGAuthor] as? String == "Önder"
+            return tiff?[kCGImagePropertyTIFFArtist] as? String == "Test Author" || pngDict?[kCGImagePropertyPNGAuthor] as? String == "Test Author"
         }
 
         // Hold-and-nudge trigger: the decision the drag watcher makes on each tick.
