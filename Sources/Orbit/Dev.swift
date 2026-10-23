@@ -139,6 +139,37 @@ enum SelfTest {
         check("pdf extract page") { PDFDocument(url: try action([pdf], "extract")[0])?.pageCount == 1 }
         check("pdf watermark") { PDFDocument(url: try action([pdf], "watermark")[0])?.pageCount == 2 }
 
+        // Editor renders (no windows): same code paths the Apply buttons use.
+        check("frame render") {
+            let img = try ImageEngine.load(png).0
+            let out = FrameRender.render(img, backdrop: MainActor.assumeIsolated { FrameModel.backdrops[0] }, padding: 0.1, radius: 0.05, shadow: 0.5)
+            return out.width == 480 && out.height == 380
+        }
+        check("redact black box") {
+            let img = try ImageEngine.load(png).0
+            // Canvas == pixels (k = 1); box over the top-left corner, which is white in the fixture.
+            let out = MarkupRender.render(img, marks: [Mark(kind: .black, a: CGPoint(x: 0, y: 0), b: CGPoint(x: 50, y: 50))], k: 1)
+            let ctx = CGContext(data: nil, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            ctx.draw(out.cropping(to: CGRect(x: 10, y: 10, width: 1, height: 1))!, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+            let p = ctx.data!.bindMemory(to: UInt8.self, capacity: 4)
+            return p[0] < 10 && p[1] < 10 && p[2] < 10
+        }
+        check("crop model pixels") {
+            MainActor.assumeIsolated {
+                let m = CropModel(try! ImageEngine.load(png).0)
+                m.setRatio(1)
+                return m.pixelRect.width == 300 && m.pixelRect.height == 300
+            }
+        }
+        check("metadata write") {
+            let out = try Editors.writeMetadata(png, title: "T", author: "Önder", note: "c", dropGPS: true, dropAll: false)
+            let props = try ImageEngine.load(out).1
+            let tiff = props[kCGImagePropertyTIFFDictionary] as? [CFString: Any]
+            let pngDict = props[kCGImagePropertyPNGDictionary] as? [CFString: Any]
+            return tiff?[kCGImagePropertyTIFFArtist] as? String == "Önder" || pngDict?[kCGImagePropertyPNGAuthor] as? String == "Önder"
+        }
+
         if let ff = Media.ffmpegPath {
             // 2 s test clip: a 640x360 picture letterboxed inside 640x480.
             let mov = root.appendingPathComponent("clip.mp4")

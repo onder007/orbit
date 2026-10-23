@@ -50,7 +50,8 @@ enum ImageEngine {
         else { throw OrbitError("\(type.preferredFilenameExtension ?? "This format") cannot be written on this Mac") }
         var opts: [CFString: Any] = [kCGImageDestinationLossyCompressionQuality: quality]
         if let metadata {
-            for k in [kCGImagePropertyExifDictionary, kCGImagePropertyGPSDictionary, kCGImagePropertyTIFFDictionary, kCGImagePropertyIPTCDictionary] {
+            for k in [kCGImagePropertyExifDictionary, kCGImagePropertyGPSDictionary, kCGImagePropertyTIFFDictionary,
+                      kCGImagePropertyIPTCDictionary, kCGImagePropertyPNGDictionary] {
                 if let v = metadata[k] { opts[k] = v }
             }
         }

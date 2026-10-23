@@ -268,6 +268,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Start with the Mac, so the ring is always one press away.
         if SMAppService.mainApp.status != .enabled { try? SMAppService.mainApp.register() }
 
+        // `Orbit --do <action id> <file>` runs one action inside the app, editors included (manual testing).
+        if let i = CommandLine.arguments.firstIndex(of: "--do"), CommandLine.arguments.count > i + 2 {
+            let id = CommandLine.arguments[i + 1], files = [URL(fileURLWithPath: CommandLine.arguments[i + 2])]
+            if let a = Catalog.segments(for: files).flatMap(\.actions).first(where: { $0.id == id }) {
+                Task.detached { do { print(try a.run(files)) } catch { print("error:", error.localizedDescription) } }
+            }
+        }
+
         // `Orbit --show <file>...` opens the ring at screen center (manual testing).
         let args = CommandLine.arguments
         if let i = args.firstIndex(of: "--show"), args.count > i + 1, let screen = NSScreen.main?.frame {

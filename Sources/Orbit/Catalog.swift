@@ -102,6 +102,7 @@ enum Catalog {
         ]),
 
         Segment(id: "edit", title: "Edit", symbol: "slider.horizontal.3", actions: [
+            act("crop", "Crop", "crop", Editors.crop),
             act("rotl", "Rotate L", "rotate.left") { try ImageEngine.filter($0, tag: "Rotated") { $0.oriented(.left) } },
             act("rotr", "Rotate R", "rotate.right") { try ImageEngine.filter($0, tag: "Rotated") { $0.oriented(.right) } },
             act("flip", "Flip", "arrow.left.and.right") { try ImageEngine.filter($0, tag: "Flipped") { $0.oriented(.upMirrored) } },
@@ -114,6 +115,9 @@ enum Catalog {
         ]),
 
         Segment(id: "design", title: "Design", symbol: "paintpalette", actions: [
+            act("frame", "Add BG", "photo.artframe", Editors.frame),
+            act("annotate", "Annotate", "pencil.tip.crop.circle", { try Editors.markup($0, redact: false) }),
+            act("redact", "Redact", "eye.slash.fill", { try Editors.markup($0, redact: true) }),
             act("cutout", "Remove BG", "person.crop.rectangle", VisionEngine.removeBackground),
             act("flatten", "Fill BG", "square.fill") { try ImageEngine.rewrite($0, tag: "Filled") { ImageEngine.flattened($0) } },
             Action(id: "palette", title: "Palette", symbol: "swatchpalette", run: eachMany(FileOps.palette)),
@@ -127,6 +131,7 @@ enum Catalog {
             act("under300", "< 300 KB", "scalemass") { try ImageEngine.shrink($0, under: 300_000) },
             act("strip", "No EXIF", "eye.slash") { try ImageEngine.rewrite($0, tag: "Clean", keepMetadata: false) { $0 } },
             act("ocr", "Copy Text", "text.viewfinder", VisionEngine.ocr),
+            act("meta", "Metadata", "info.circle", Editors.metadata),
         ]),
     ]
 
@@ -168,6 +173,7 @@ enum Catalog {
         Segment(id: "optimize", title: "Optimize", symbol: "gauge.with.dots.needle.33percent", actions: [
             act("pdf-compress", "Compress", "arrow.down.right.and.arrow.up.left", PDFEngine.compress),
             act("pdf-clean", "No Meta", "eye.slash", PDFEngine.stripMetadata),
+            act("pdf-meta", "Metadata", "info.circle", Editors.metadata),
         ]),
     ]
 
