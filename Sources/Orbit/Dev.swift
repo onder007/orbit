@@ -9,8 +9,9 @@ enum Preview {
         let model = RingModel(files: [file])
         model.activeSegment = min(segment, max(model.segments.count - 1, 0))
         model.hoverAction = action
+        model.shown = true
         let view = ZStack {
-            LinearGradient(colors: [Color(red: 0.16, green: 0.22, blue: 0.30), Color(red: 0.45, green: 0.33, blue: 0.26)],
+            LinearGradient(colors: [Color(red: 0.95, green: 0.33, blue: 0.30), Color(red: 0.96, green: 0.62, blue: 0.30), Color(red: 0.62, green: 0.52, blue: 0.78)],
                            startPoint: .topLeading, endPoint: .bottomTrailing)
             RingView(model: model)
         }

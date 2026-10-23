@@ -63,15 +63,15 @@ final class RingController {
         p.isOpaque = false
         p.backgroundColor = .clear
         p.hasShadow = false
-        // The ring is designed for dark glass; keep it dark under a light system theme too.
-        p.appearance = NSAppearance(named: .darkAqua)
+        // The ring is designed for light frosted glass; keep it light under a dark system theme too.
+        p.appearance = NSAppearance(named: .aqua)
         p.level = .popUpMenu
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         p.onEscape = { [weak self] in self?.close() }
 
         let host = DropHost(model: model, frame: NSRect(origin: .zero, size: size))
         let glass = NSVisualEffectView(frame: host.bounds)
-        glass.material = .hudWindow
+        glass.material = .popover
         glass.blendingMode = .behindWindow
         glass.state = .active
         let pad = Ring.size / 2 - Ring.outer.upperBound - 6

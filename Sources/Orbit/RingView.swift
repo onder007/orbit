@@ -25,6 +25,8 @@ final class RingModel: ObservableObject {
     @Published var hoverSegment: Int?
     @Published var hoverAction: Int?
     @Published var status = Status.idle
+    /// Drives the open animation (kept here: @State needs the SwiftUI macro plugin, missing without Xcode).
+    @Published var shown = false
     var onFinish: (([URL]) -> Void)?
 
     init(files: [URL]) {
@@ -98,7 +100,7 @@ struct Petal: Shape {
     func path(in rect: CGRect) -> Path {
         let c = CGPoint(x: rect.midX, y: rect.midY)
         // Shrink by the gap on every side; the round-join stroke in PetalView adds the corner radius back.
-        let inset = Ring.gap / 2 + 5
+        let inset = Ring.gap / 2 + 8
         let a0 = r0 + inset, a1 = r1 - inset
         let da0 = Double(inset / a0) * 180 / .pi, da1 = Double(inset / a1) * 180 / .pi
         var p = Path()
@@ -109,14 +111,39 @@ struct Petal: Shape {
     }
 }
 
+/// Soft light palette: frosted cream petals, one warm accent for the petal under the cursor.
+enum Palette {
+    static let accent = Color(red: 1.0, green: 0.42, blue: 0.29)
+    static let accentDeep = Color(red: 0.93, green: 0.30, blue: 0.20)
+    static let ink = Color(red: 0.24, green: 0.17, blue: 0.13)
+}
+
 struct PetalView: View {
+    enum Look { case idle, active, hot }
     let petal: Petal
-    let alpha: Double
+    let look: Look
+
+    // Opaque gradients; translucency is applied once to the whole petal so fill and stroke never stack.
+    private var fill: LinearGradient {
+        switch look {
+        case .hot: LinearGradient(colors: [Palette.accent, Palette.accentDeep], startPoint: .top, endPoint: .bottom)
+        case .active: LinearGradient(colors: [.white, Color(red: 1, green: 0.98, blue: 0.96)], startPoint: .top, endPoint: .bottom)
+        case .idle: LinearGradient(colors: [Color(red: 1, green: 0.97, blue: 0.93), Color(red: 1, green: 0.92, blue: 0.85)],
+                                   startPoint: .top, endPoint: .bottom)
+        }
+    }
+    private var alpha: Double { look == .idle ? 0.72 : look == .active ? 0.95 : 1 }
+
     var body: some View {
-        // Opaque fill + round-join stroke, then one opacity for the group: no doubled edge.
-        petal.fill(.white).overlay(petal.stroke(.white, style: StrokeStyle(lineWidth: 10, lineJoin: .round)))
-            .compositingGroup()
-            .opacity(alpha)
+        // Fill + round-join stroke in one group gives soft corners without a doubled edge.
+        ZStack {
+            petal.fill(fill)
+            petal.stroke(fill, style: StrokeStyle(lineWidth: 16, lineJoin: .round))
+        }
+        .compositingGroup()
+        .opacity(alpha)
+        .shadow(color: look == .hot ? Palette.accentDeep.opacity(0.35) : Color.black.opacity(0.06),
+                radius: look == .hot ? 10 : 3, y: look == .hot ? 4 : 1)
     }
 }
 
@@ -124,13 +151,13 @@ struct PetalLabel: View {
     let title: String, symbol: String, highlighted: Bool, compact: Bool
     var body: some View {
         VStack(spacing: compact ? 3 : 5) {
-            Image(systemName: symbol).font(.system(size: compact ? 12 : 14, weight: .semibold))
+            Image(systemName: symbol).font(.system(size: compact ? 12.5 : 14, weight: .medium))
             Text(title.uppercased())
-                .font(.system(size: compact ? 9 : 9.5, weight: .bold, design: .rounded))
-                .tracking(0.6)
+                .font(.system(size: compact ? 9 : 9.5, weight: .semibold, design: .rounded))
+                .tracking(0.8)
                 .lineLimit(1).minimumScaleFactor(0.7)
         }
-        .foregroundStyle(highlighted ? Color.black.opacity(0.88) : Color.white.opacity(0.9))
+        .foregroundStyle(highlighted ? Color.white : Palette.ink.opacity(0.78))
         .frame(width: compact ? 62 : 70)
     }
 }
@@ -142,16 +169,20 @@ struct RingView: View {
         GeometryReader { geo in
             let c = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
             ZStack {
-                // Dark tint over the system glass so labels stay readable on light backgrounds.
-                Circle().fill(Color.black.opacity(0.55)).frame(width: (Ring.outer.upperBound + 6) * 2)
+                // Frosted base: a light veil over the system glass, a hairline rim and a soft drop shadow.
+                Circle()
+                    .fill(Color.white.opacity(0.28))
+                    .overlay(Circle().strokeBorder(Color.white.opacity(0.65), lineWidth: 1))
+                    .frame(width: (Ring.outer.upperBound + 6) * 2)
+                    .shadow(color: .black.opacity(0.18), radius: 28, y: 14)
 
                 // Outer action petals for the active segment.
                 ForEach(Array(model.actionAngles().enumerated()), id: \.offset) { i, a in
                     let hot = model.hoverAction == i
                     let action = model.segments[model.activeSegment].actions[i]
                     PetalView(petal: Petal(start: a.start, end: a.end, r0: Ring.outer.lowerBound, r1: Ring.outer.upperBound),
-                              alpha: hot ? 1 : 0.13)
-                        .scaleEffect(hot ? 1.03 : 1)
+                              look: hot ? .hot : .idle)
+                        .scaleEffect(hot ? 1.04 : 1)
                     PetalLabel(title: action.title, symbol: action.symbol, highlighted: hot, compact: true)
                         .position(Ring.point((a.start + a.end) / 2, (Ring.outer.lowerBound + Ring.outer.upperBound) / 2, center: c))
                 }
@@ -162,14 +193,16 @@ struct RingView: View {
                     let active = model.activeSegment == i
                     PetalView(petal: Petal(start: mid - model.segmentSpan / 2, end: mid + model.segmentSpan / 2,
                                            r0: Ring.inner.lowerBound, r1: Ring.inner.upperBound),
-                              alpha: active ? 0.30 : 0.09)
+                              look: active ? .active : .idle)
                     PetalLabel(title: s.title, symbol: s.symbol, highlighted: false, compact: false)
-                        .opacity(active ? 1 : 0.75)
+                        .opacity(active ? 1 : 0.7)
                         .position(Ring.point(mid, (Ring.inner.lowerBound + Ring.inner.upperBound) / 2, center: c))
                 }
 
                 Hub(model: model).position(c)
             }
+            .scaleEffect(model.shown ? 1 : 0.86)
+            .opacity(model.shown ? 1 : 0)
             .contentShape(Circle())
             .onContinuousHover(coordinateSpace: .local) { phase in
                 if case .active(let p) = phase { model.hit(p, in: geo.size) }
@@ -177,7 +210,9 @@ struct RingView: View {
             .onTapGesture(coordinateSpace: .local) { p in model.hit(p, in: geo.size); model.fire() }
         }
         .frame(width: Ring.size, height: Ring.size)
-        .animation(.spring(response: 0.25, dampingFraction: 0.85), value: model.hoverAction)
+        .animation(.spring(response: 0.22, dampingFraction: 0.8), value: model.hoverAction)
+        .animation(.spring(response: 0.3, dampingFraction: 0.78), value: model.activeSegment)
+        .onAppear { withAnimation(.spring(response: 0.32, dampingFraction: 0.72)) { model.shown = true } }
     }
 }
 
@@ -186,33 +221,35 @@ struct Hub: View {
 
     var body: some View {
         ZStack {
-            Circle().fill(Color.black.opacity(0.55))
-                .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+            Circle()
+                .fill(LinearGradient(colors: [.white, Color(red: 1, green: 0.96, blue: 0.92)], startPoint: .top, endPoint: .bottom))
+                .overlay(Circle().strokeBorder(Color.white, lineWidth: 1))
+                .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
             content.padding(10)
         }
-        .frame(width: Ring.hub * 2 - 6, height: Ring.hub * 2 - 6)
+        .frame(width: Ring.hub * 2 - 8, height: Ring.hub * 2 - 8)
     }
 
     @ViewBuilder var content: some View {
         switch model.status {
         case .working(let title):
-            VStack(spacing: 6) { ProgressView().controlSize(.small).tint(.white); caption(title) }
+            VStack(spacing: 6) { ProgressView().controlSize(.small).tint(Palette.accent); caption(title) }
         case .done(let n):
             VStack(spacing: 4) {
-                Image(systemName: "checkmark").font(.system(size: 22, weight: .semibold))
+                Image(systemName: "checkmark.circle.fill").font(.system(size: 24)).foregroundStyle(Palette.accent)
                 caption(n == 1 ? "Saved" : "\(n) files")
-            }.foregroundStyle(.white)
+            }
         case .failed(let msg):
             VStack(spacing: 4) {
-                Image(systemName: "exclamationmark.triangle").font(.system(size: 18))
+                Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 18)).foregroundStyle(Palette.accentDeep)
                 caption(msg).lineLimit(3)
-            }.foregroundStyle(.white)
+            }
         case .idle:
             if let a = model.hoveredAction {
                 VStack(spacing: 2) {
-                    Text(a.title).font(.system(size: 13, weight: .semibold, design: .rounded))
+                    Text(a.title).font(.system(size: 14, weight: .semibold, design: .rounded)).foregroundStyle(Palette.ink)
                     caption(model.segments[model.activeSegment].title)
-                }.foregroundStyle(.white)
+                }
             } else {
                 VStack(spacing: 4) {
                     Image(nsImage: NSWorkspace.shared.icon(forFile: model.files.first?.path ?? "/"))
@@ -230,7 +267,7 @@ struct Hub: View {
 
     func caption(_ s: String) -> some View {
         Text(s).font(.system(size: 9.5, weight: .medium, design: .rounded))
-            .foregroundStyle(Color.white.opacity(0.7))
+            .foregroundStyle(Palette.ink.opacity(0.55))
             .multilineTextAlignment(.center)
             .lineLimit(1).minimumScaleFactor(0.7)
     }
