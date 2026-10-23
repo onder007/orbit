@@ -1,5 +1,6 @@
 import AppKit
 import PDFKit
+import CoreText
 import SwiftUI
 
 /// `Orbit --preview <file> <out.png> [segment] [action]` renders the ring as it looks over a desktop.
@@ -84,6 +85,60 @@ enum SelfTest {
             return try String(contentsOf: action([p], "pdf-txt")[0], encoding: .utf8).contains("Orbit")
         }
 
+        // Prompts answered without UI.
+        Ask.answer = { title in
+            switch title {
+            case "Lock PDF", "Unlock PDF": return "s3cret"
+            case "Delete pages": return "1"
+            case "Extract pages": return "2"
+            case "Watermark": return "DRAFT"
+            case "Trim": return "0:00-0:01"
+            default: return title.hasPrefix("Rename") ? "renamed-{n}" : nil
+            }
+        }
+
+        // Text image for OCR: dark words on white.
+        let words = root.appendingPathComponent("words.png")
+        let tc = CGContext(data: nil, width: 900, height: 240, bitsPerComponent: 8, bytesPerRow: 0,
+                           space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+        tc.setFillColor(.white); tc.fill(CGRect(x: 0, y: 0, width: 900, height: 240))
+        tc.textPosition = CGPoint(x: 40, y: 90)
+        CTLineDraw(CTLineCreateWithAttributedString(NSAttributedString(string: "Orbit reads this line", attributes: [
+            .font: NSFont.systemFont(ofSize: 64, weight: .semibold), .foregroundColor: NSColor.black])), tc)
+        try? ImageEngine.write(tc.makeImage()!, to: words, type: .png)
+        check("image OCR") { try String(contentsOf: action([words], "ocr")[0], encoding: .utf8).contains("Orbit") }
+        check("palette") {
+            let out = try action([png], "palette")
+            let hex = try String(contentsOf: out[1], encoding: .utf8)
+            return out.count == 2 && hex.split(separator: "\n").count == 6
+        }
+        check("mac icon") { try action([png], "icns")[0].pathExtension == "icns" }
+        check("favicons") { (try FileManager.default.contentsOfDirectory(atPath: action([png], "favicon")[0].path)).count == 6 }
+
+        let note = root.appendingPathComponent("link.txt")
+        try? "https://example.com".write(to: note, atomically: true, encoding: .utf8)
+        check("qr code") { try size(action([note], "qr")[0])[0] > 300 }
+        check("zip + unzip") {
+            let z = try action([png, note], "zip")[0]
+            let dir = try action([z], "unzip")[0]
+            return FileManager.default.fileExists(atPath: dir.appendingPathComponent("link.txt").path)
+        }
+        check("rename") {
+            let copy = root.appendingPathComponent("tmp-a.txt")
+            try "x".write(to: copy, atomically: true, encoding: .utf8)
+            return try action([copy], "rename")[0].lastPathComponent == "renamed-1.txt"
+        }
+
+        check("pdf OCR") { try String(contentsOf: action([try action([words], "img-pdf")[0]], "pdf-ocr")[0], encoding: .utf8).contains("Orbit") }
+        check("pdf lock + unlock") {
+            let locked = try action([pdf], "lock")[0]
+            guard PDFDocument(url: locked)?.isLocked == true else { return false }
+            return PDFDocument(url: try action([locked], "unlock")[0])?.isEncrypted == false
+        }
+        check("pdf delete page") { PDFDocument(url: try action([pdf], "delpages")[0])?.pageCount == 1 }
+        check("pdf extract page") { PDFDocument(url: try action([pdf], "extract")[0])?.pageCount == 1 }
+        check("pdf watermark") { PDFDocument(url: try action([pdf], "watermark")[0])?.pageCount == 2 }
+
         if let ff = Media.ffmpegPath {
             // 2 s test clip: a 640x360 picture letterboxed inside 640x480.
             let mov = root.appendingPathComponent("clip.mp4")
@@ -99,6 +154,12 @@ enum SelfTest {
             check("audio normalize") {
                 let wav = try action([mov], "v-wav")[0]
                 return try action([wav], "norm")[0].pathExtension == "wav"
+            }
+            check("video trim") { (try MediaExtras.duration(action([mov], "vtrim")[0])) < 1.5 }
+            check("contact sheet") { try action([mov], "sheet")[0].pathExtension == "jpg" }
+            check("burn subtitles") {
+                try "1\n00:00:00,000 --> 00:00:01,500\nHello\n".write(to: mov.deletingPathExtension().appendingPathExtension("srt"), atomically: true, encoding: .utf8)
+                return try action([mov], "subs")[0].pathExtension == "mp4"
             }
         } else {
             print("SKIP video/audio: ffmpeg not found")

@@ -98,6 +98,13 @@ final class RingController {
         }
     }
 
+    /// Hides the ring while a prompt or editor window is up; the action keeps running.
+    func hideForPrompt() {
+        if let m = outsideClick { NSEvent.removeMonitor(m); outsideClick = nil }
+        panel?.orderOut(nil)
+        isBusy = true
+    }
+
     func close() {
         if let m = outsideClick { NSEvent.removeMonitor(m); outsideClick = nil }
         panel?.orderOut(nil)
@@ -235,7 +242,7 @@ final class HotKey {
 // MARK: - App
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var status: NSStatusItem!
     let drag = DragWatcher()
     let longPress = LongPressWatcher()
@@ -247,6 +254,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         menu.addItem(withTitle: "Open Ring for Finder Selection  ⌥Space", action: #selector(openRing), keyEquivalent: "")
         menu.addItem(withTitle: "Tip: hold a file and nudge it", action: nil, keyEquivalent: "")
+        menu.addItem(.separator())
+        undoItem = menu.addItem(withTitle: "Undo", action: #selector(undoLast), keyEquivalent: "")
+        menu.delegate = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Orbit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         status.menu = menu
@@ -266,6 +276,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    var undoItem: NSMenuItem?
+
+    @objc func undoLast() { UndoStore.run() }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        undoItem?.title = UndoStore.label.map { "Undo \($0)" } ?? "Undo"
+        undoItem?.isEnabled = UndoStore.label != nil
+    }
+
     @objc func openRing() {
         let files = Finder.selection()
         guard !files.isEmpty else { NSSound.beep(); return }
@@ -278,6 +297,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 let args = CommandLine.arguments
 if let i = args.firstIndex(of: "--selftest") {
     exit(SelfTest.run(dir: args.count > i + 1 ? args[i + 1] : nil))
+}
+if let i = args.firstIndex(of: "--run"), args.count > i + 2 {
+    // --run <action id> <file>...  runs one action from the command line.
+    let files = args[(i + 2)...].map { URL(fileURLWithPath: $0) }
+    guard let a = Catalog.segments(for: files).flatMap(\.actions).first(where: { $0.id == args[i + 1] }) else {
+        print("no action \(args[i + 1]) for these files"); exit(2)
+    }
+    do { for u in try a.run(files) { print(u.path) }; exit(0) } catch { print("error: \(error.localizedDescription)"); exit(1) }
 }
 if let i = args.firstIndex(of: "--preview"), args.count > i + 2 {
     // --preview <input file> <out.png> [segment] [action]

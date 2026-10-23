@@ -20,6 +20,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
   <key>CFBundleVersion</key><string>1</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>LSUIElement</key><true/>
+  <key>NSSpeechRecognitionUsageDescription</key><string>Orbit turns speech in your audio and video files into text, on this Mac.</string>
   <key>NSAppleEventsUsageDescription</key><string>Orbit reads the files you selected in Finder so it can convert them.</string>
 </dict>
 </plist>

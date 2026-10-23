@@ -32,6 +32,8 @@ final class RingModel: ObservableObject {
     init(files: [URL]) {
         self.files = files
         self.segments = Catalog.segments(for: files)
+        if let first = files.first, let last = Usage.lastSegment(for: FileKind.of(first)),
+           let i = segments.firstIndex(where: { $0.id == last }) { activeSegment = i }
     }
 
     var segmentSpan: Double { 360 / Double(max(segments.count, 1)) }
@@ -77,13 +79,22 @@ final class RingModel: ObservableObject {
     func fire() {
         guard status == .idle, let action = hoveredAction else { return }
         status = .working(action.title)
+        if let first = files.first { Usage.use(segment: segments[activeSegment].id, kind: FileKind.of(first)) }
         let files = files
+        RunProgress.report = files.count > 1 ? { done, total in
+            DispatchQueue.main.async { MainActor.assumeIsolated { self.status = .working("\(action.title) \(done)/\(total)") } }
+        } : nil
         Task.detached(priority: .userInitiated) {
             do {
                 let out = try action.run(files)
-                await MainActor.run { self.status = .done(out.count); self.onFinish?(out) }
+                await MainActor.run {
+                    RunProgress.report = nil
+                    // Rename records its own undo (renaming back); everything else trashes its outputs.
+                    if action.id != "rename" { UndoStore.recordOutputs(out) }
+                    self.status = .done(out.count); self.onFinish?(out)
+                }
             } catch {
-                await MainActor.run { self.status = .failed(error.localizedDescription); self.onFinish?([]) }
+                await MainActor.run { RunProgress.report = nil; self.status = .failed(error.localizedDescription); self.onFinish?([]) }
             }
         }
     }

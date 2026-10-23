@@ -4,16 +4,17 @@ import PDFKit
 import UniformTypeIdentifiers
 
 enum FileKind: String {
-    case image, pdf, document, video, audio, unknown
+    case image, pdf, document, video, audio, archive, unknown
 
     static func of(_ url: URL) -> FileKind {
         let ext = url.pathExtension.lowercased()
         guard let t = UTType(filenameExtension: ext) else { return .unknown }
         if t.conforms(to: .pdf) { return .pdf }
+        if ext == "zip" { return .archive }
         if t.conforms(to: .image) { return .image }
         if t.conforms(to: .movie) || t.conforms(to: .video) { return .video }
         if t.conforms(to: .audio) { return .audio }
-        if t.conforms(to: .text) || t.conforms(to: .rtf) || ["doc", "docx", "odt", "md", "webarchive"].contains(ext) { return .document }
+        if t.conforms(to: .text) || t.conforms(to: .rtf) || ["doc", "docx", "odt", "md", "webarchive", "webloc"].contains(ext) { return .document }
         return .unknown
     }
 }
@@ -34,9 +35,15 @@ struct Segment: Identifiable {
     let actions: [Action]
 }
 
-/// One output per input file.
-private func each(_ f: @escaping (URL) throws -> URL) -> ([URL]) throws -> [URL] { { try $0.map(f) } }
-private func eachMany(_ f: @escaping (URL) throws -> [URL]) -> ([URL]) throws -> [URL] { { try $0.flatMap(f) } }
+/// One output per input file, reporting progress after each.
+private func each(_ f: @escaping (URL) throws -> URL) -> ([URL]) throws -> [URL] { eachMany { [try f($0)] } }
+private func eachMany(_ f: @escaping (URL) throws -> [URL]) -> ([URL]) throws -> [URL] {
+    { files in
+        var out: [URL] = []
+        for (i, u) in files.enumerated() { out += try f(u); RunProgress.report?(i + 1, files.count) }
+        return out
+    }
+}
 private func act(_ id: String, _ title: String, _ symbol: String, _ f: @escaping (URL) throws -> URL) -> Action {
     Action(id: id, title: title, symbol: symbol, run: each(f))
 }
@@ -51,6 +58,7 @@ enum Catalog {
         case .document: all = document
         case .video: all = video
         case .audio: all = audio
+        case .archive: all = archive
         case .unknown: all = []
         }
         // Hide merge/combine for a single file, and the target format equal to the source.
@@ -59,8 +67,18 @@ enum Catalog {
         return all.map { s in
             Segment(id: s.id, title: s.title, symbol: s.symbol,
                     actions: s.actions.filter { (files.count > 1 || !$0.multi) && $0.id != "to-\(ext)" })
-        }.filter { !$0.actions.isEmpty }
+        }.filter { !$0.actions.isEmpty } + [file]
     }
+
+    /// Shown for every kind of file.
+    static let file = Segment(id: "file", title: "File", symbol: "folder", actions: [
+        Action(id: "zip", title: "ZIP", symbol: "doc.zipper") { [try FileOps.zip($0)] },
+        Action(id: "rename", title: "Rename", symbol: "character.cursor.ibeam", run: FileOps.rename),
+    ])
+
+    static let archive: [Segment] = [
+        Segment(id: "archive", title: "Archive", symbol: "archivebox", actions: [act("unzip", "Unzip", "arrow.up.bin", FileOps.unzip)]),
+    ]
 
     // MARK: Image
 
@@ -93,7 +111,14 @@ enum Catalog {
             act("sharpen", "Sharpen", "diamond") {
                 try ImageEngine.filter($0, tag: "Sharp") { $0.applyingFilter("CISharpenLuminance", parameters: [kCIInputSharpnessKey: 0.6]) }
             },
+        ]),
+
+        Segment(id: "design", title: "Design", symbol: "paintpalette", actions: [
+            act("cutout", "Remove BG", "person.crop.rectangle", VisionEngine.removeBackground),
             act("flatten", "Fill BG", "square.fill") { try ImageEngine.rewrite($0, tag: "Filled") { ImageEngine.flattened($0) } },
+            Action(id: "palette", title: "Palette", symbol: "swatchpalette", run: eachMany(FileOps.palette)),
+            act("icns", "Mac Icon", "app.dashed", IconEngine.icns),
+            act("favicon", "Favicons", "globe", IconEngine.favicons),
         ]),
 
         Segment(id: "optimize", title: "Optimize", symbol: "gauge.with.dots.needle.33percent", actions: [
@@ -101,6 +126,7 @@ enum Catalog {
             act("under1", "< 1 MB", "scalemass") { try ImageEngine.shrink($0, under: 1_000_000) },
             act("under300", "< 300 KB", "scalemass") { try ImageEngine.shrink($0, under: 300_000) },
             act("strip", "No EXIF", "eye.slash") { try ImageEngine.rewrite($0, tag: "Clean", keepMetadata: false) { $0 } },
+            act("ocr", "Copy Text", "text.viewfinder", VisionEngine.ocr),
         ]),
     ]
 
@@ -114,6 +140,7 @@ enum Catalog {
             act("pdf-docx", "DOCX", "doc.text") { try DocEngine.convert($0, to: "docx") },
             act("pdf-rtf", "RTF", "doc.text") { try DocEngine.convert($0, to: "rtf") },
             act("pdf-html", "HTML", "chevron.left.forwardslash.chevron.right") { try DocEngine.convert($0, to: "html") },
+            act("pdf-ocr", "OCR", "text.viewfinder", VisionEngine.ocr),
         ]),
         Segment(id: "pages", title: "Pages", symbol: "doc.on.doc", actions: [
             Action(id: "merge", title: "Merge", symbol: "square.stack.3d.down.forward", multi: true) { [try PDFEngine.merge($0)] },
@@ -130,6 +157,13 @@ enum Catalog {
                 try ImageEngine.write(PDFEngine.render(d.page(at: 0)!, scale: 2), to: out, type: .png)
                 return out
             },
+            act("delpages", "Delete", "trash", PDFExtras.deletePages),
+            act("extract", "Extract", "doc.badge.plus", PDFExtras.extractPages),
+        ]),
+        Segment(id: "secure", title: "Secure", symbol: "lock", actions: [
+            act("lock", "Lock", "lock.fill", PDFExtras.lock),
+            act("unlock", "Unlock", "lock.open", PDFExtras.unlock),
+            act("watermark", "Watermark", "seal", PDFExtras.watermark),
         ]),
         Segment(id: "optimize", title: "Optimize", symbol: "gauge.with.dots.needle.33percent", actions: [
             act("pdf-compress", "Compress", "arrow.down.right.and.arrow.up.left", PDFEngine.compress),
@@ -144,6 +178,7 @@ enum Catalog {
             ["pdf", "docx", "rtf", "txt", "html", "odt", "doc"].map { ext in
                 act("to-\(ext)", ext.uppercased(), ext == "pdf" ? "doc.richtext" : "doc.text") { try DocEngine.convert($0, to: ext) }
             }),
+        Segment(id: "tools", title: "Tools", symbol: "wrench.and.screwdriver", actions: [act("qr", "QR Code", "qrcode", FileOps.qr)]),
     ]
 
     // MARK: Video
@@ -163,17 +198,21 @@ enum Catalog {
             act("v720", "720p", "rectangle") { try Media.video($0, tag: "720p", vf: "scale=-2:720") },
             act("v1080", "1080p", "rectangle") { try Media.video($0, tag: "1080p", vf: "scale=-2:1080") },
             act("vrot", "Rotate", "rotate.right") { try Media.video($0, tag: "Rotated", vf: "transpose=1") },
+            act("vtrim", "Trim", "timeline.selection") { try MediaExtras.trim($0, video: true) },
         ]),
         Segment(id: "audio", title: "Audio", symbol: "waveform", actions: [
             act("v-mp3", "MP3", "music.note") { try Media.ffmpeg($0, ext: "mp3", tag: nil, ["-vn", "-c:a", "libmp3lame", "-q:a", "2"]) },
             act("v-wav", "WAV", "waveform") { try Media.ffmpeg($0, ext: "wav", tag: nil, ["-vn"]) },
             act("mute", "Mute", "speaker.slash") { try Media.ffmpeg($0, ext: $0.pathExtension, tag: "Muted", ["-an", "-c:v", "copy"]) },
+            act("vtranscribe", "Transcribe", "captions.bubble", MediaExtras.transcribe),
+            act("subs", "Subtitles", "captions.bubble.fill", MediaExtras.burnSubtitles),
         ]),
         Segment(id: "optimize", title: "Optimize", symbol: "gauge.with.dots.needle.33percent", actions: [
             act("vcompress", "Compress", "arrow.down.right.and.arrow.up.left") {
                 try Media.ffmpeg($0, ext: "mp4", tag: "Compressed",
                                  ["-c:v", "libx264", "-preset", "slow", "-crf", "28", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart"])
             },
+            act("sheet", "Contact Sheet", "square.grid.3x3", MediaExtras.contactSheet),
             act("web", "Web Ready", "bolt") { try Media.ffmpeg($0, ext: "mp4", tag: "Web", ["-c", "copy", "-movflags", "+faststart"]) },
             act("speed2", "2x Speed", "forward") {
                 try Media.ffmpeg($0, ext: "mp4", tag: "2x", ["-filter_complex", "[0:v]setpts=0.5*PTS[v];[0:a]atempo=2.0[a]", "-map", "[v]", "-map", "[a]"] + Media.h264)
@@ -194,6 +233,8 @@ enum Catalog {
                 try Media.ffmpeg($0, ext: $0.pathExtension, tag: "Trimmed",
                                  ["-af", "silenceremove=start_periods=1:start_threshold=-50dB,areverse,silenceremove=start_periods=1:start_threshold=-50dB,areverse"])
             },
+            act("atrim", "Trim", "timeline.selection") { try MediaExtras.trim($0, video: false) },
+            act("atranscribe", "Transcribe", "captions.bubble", MediaExtras.transcribe),
             act("monoa", "Mono", "circle.lefthalf.filled") { try Media.ffmpeg($0, ext: $0.pathExtension, tag: "Mono", ["-ac", "1"]) },
             act("fade", "Fade", "chart.line.downtrend.xyaxis") {
                 try Media.ffmpeg($0, ext: $0.pathExtension, tag: "Faded", ["-af", "afade=t=in:d=1.5,areverse,afade=t=in:d=1.5,areverse"])

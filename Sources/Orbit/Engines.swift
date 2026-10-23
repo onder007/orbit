@@ -307,10 +307,11 @@ enum DocEngine {
 
 enum Proc {
     @discardableResult
-    static func run(_ exe: String, _ args: [String]) throws -> String {
+    static func run(_ exe: String, _ args: [String], cwd: URL? = nil) throws -> String {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: exe)
         p.arguments = args
+        if let cwd { p.currentDirectoryURL = cwd }
         let err = Pipe(), out = Pipe()
         p.standardError = err; p.standardOutput = out
         try p.run()
