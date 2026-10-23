@@ -139,8 +139,8 @@ enum Finder {
 /// Watches the drag pasteboard instead of mouse events, which needs no Accessibility permission.
 @MainActor
 final class DragWatcher {
-    static let pause: TimeInterval = 0.25
-    static let radius: CGFloat = 90
+    nonisolated static let pause: TimeInterval = 0.25
+    nonisolated static let radius: CGFloat = 90
     private var baseline = NSPasteboard(name: .drag).changeCount
     private var shownForThisDrag = false
     private var dragStart: (at: NSPoint, time: Date)?
@@ -150,6 +150,16 @@ final class DragWatcher {
         timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: true) { _ in
             MainActor.assumeIsolated { self.tick() }
         }
+    }
+
+    enum Step: Equatable { case start, wait, cancel, open }
+
+    /// One tick of an active file drag, as a pure function so tests can drive it without a mouse.
+    /// A drag that leaves the start area is a normal file move (cancel); a short hold near it opens the ring.
+    nonisolated static func step(start: (at: NSPoint, time: Date)?, now: NSPoint, time: Date, shift: Bool) -> Step {
+        guard let start else { return .start }
+        if start.at.distance(to: now) > radius { return .cancel }
+        return shift || time.timeIntervalSince(start.time) >= pause ? .open : .wait
     }
 
     private func tick() {
@@ -168,10 +178,12 @@ final class DragWatcher {
         }
         guard !shownForThisDrag, pb.changeCount != baseline else { return }
         let now = NSEvent.mouseLocation
-        guard let start = dragStart else { dragStart = (now, Date()); return }
-        // A drag that left the start area is a normal file move; stop watching it.
-        if start.at.distance(to: now) > Self.radius { baseline = pb.changeCount; dragStart = nil; return }
-        guard NSEvent.modifierFlags.contains(.shift) || Date().timeIntervalSince(start.time) >= Self.pause else { return }
+        switch Self.step(start: dragStart, now: now, time: Date(), shift: NSEvent.modifierFlags.contains(.shift)) {
+        case .start: dragStart = (now, Date()); return
+        case .cancel: baseline = pb.changeCount; dragStart = nil; return
+        case .wait: return
+        case .open: break
+        }
         let urls = (pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]) ?? []
         guard !urls.isEmpty else { baseline = pb.changeCount; return }
         shownForThisDrag = true
@@ -224,7 +236,7 @@ final class LongPressWatcher {
 }
 
 extension NSPoint {
-    func distance(to p: NSPoint) -> CGFloat { hypot(x - p.x, y - p.y) }
+    nonisolated func distance(to p: NSPoint) -> CGFloat { hypot(x - p.x, y - p.y) }
 }
 
 /// Global ⌥Space: ring for the current Finder selection.

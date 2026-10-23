@@ -170,6 +170,45 @@ enum SelfTest {
             return tiff?[kCGImagePropertyTIFFArtist] as? String == "Önder" || pngDict?[kCGImagePropertyPNGAuthor] as? String == "Önder"
         }
 
+        // Hold-and-nudge trigger: the decision the drag watcher makes on each tick.
+        check("ring trigger decisions") {
+            let t0 = Date(), p0 = NSPoint(x: 500, y: 500)
+            let step = DragWatcher.step
+            return step(nil, p0, t0, false) == .start
+                && step((p0, t0), NSPoint(x: 512, y: 506), t0.addingTimeInterval(0.1), false) == .wait
+                && step((p0, t0), NSPoint(x: 512, y: 506), t0.addingTimeInterval(0.3), false) == .open
+                && step((p0, t0), NSPoint(x: 700, y: 500), t0.addingTimeInterval(0.3), false) == .cancel
+                && step((p0, t0), p0, t0.addingTimeInterval(0.05), true) == .open
+        }
+        // Editor gestures, driven through the same model calls the drag gestures make.
+        check("crop drag: corner, ratio, move") {
+            MainActor.assumeIsolated {
+                let m = CropModel(try! ImageEngine.load(png).0)          // 400x300, k = 1
+                m.drag(start: CGPoint(x: 400, y: 300), now: CGPoint(x: 200, y: 150)); m.endDrag()
+                let free = m.rect == CGRect(x: 0, y: 0, width: 200, height: 150)
+                m.setRatio(1)                                            // (50, 0, 300, 300)
+                m.drag(start: CGPoint(x: 350, y: 300), now: CGPoint(x: 250, y: 200)); m.endDrag()
+                let ratio = m.rect == CGRect(x: 50, y: 0, width: 200, height: 200)
+                m.drag(start: CGPoint(x: 100, y: 100), now: CGPoint(x: 150, y: 100)); m.endDrag()
+                return free && ratio && m.rect.minX == 100
+            }
+        }
+        check("annotate drag draws a red arrow") {
+            let (marks, k): ([Mark], CGFloat) = MainActor.assumeIsolated {
+                let m = MarkupModel(try! ImageEngine.load(png).0, redact: false)
+                m.drag(start: CGPoint(x: 20, y: 20), now: CGPoint(x: 60, y: 20))
+                m.drag(start: CGPoint(x: 20, y: 20), now: CGPoint(x: 180, y: 20)); m.endDrag()
+                return (m.marks, m.k)
+            }
+            guard marks.count == 1 else { return false }
+            let out = MarkupRender.render(try ImageEngine.load(png).0, marks: marks, k: k)
+            let ctx = CGContext(data: nil, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            ctx.draw(out.cropping(to: CGRect(x: 100, y: 20, width: 1, height: 1))!, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+            let p = ctx.data!.bindMemory(to: UInt8.self, capacity: 4)
+            return p[0] > 200 && p[1] < 100 && p[2] < 100
+        }
+
         if let ff = Media.ffmpegPath {
             // 2 s test clip: a 640x360 picture letterboxed inside 640x480.
             let mov = root.appendingPathComponent("clip.mp4")
