@@ -168,7 +168,7 @@ enum MediaExtras {
         return try Media.video(url, tag: "Subtitled", vf: "subtitles='\(escaped)'")
     }
 
-    /// On-device speech recognition in the system language; video goes through a temporary WAV first.
+    /// On-device speech recognition; video goes through a temporary WAV first.
     static func transcribe(_ url: URL) throws -> URL {
         var status = SFSpeechRecognizer.authorizationStatus()
         if status == .notDetermined {
@@ -177,9 +177,6 @@ enum MediaExtras {
             sem.wait()
         }
         guard status == .authorized else { throw OrbitError("Allow Speech Recognition for Orbit in System Settings") }
-        guard let rec = SFSpeechRecognizer(locale: Locale.current) ?? SFSpeechRecognizer(locale: Locale(identifier: "en-US")),
-              rec.isAvailable else { throw OrbitError("Speech recognition is not available") }
-
         var audio = url
         var tmp: URL?
         if FileKind.of(url) == .video, let ff = Media.ffmpegPath {
@@ -189,20 +186,39 @@ enum MediaExtras {
         }
         defer { if let tmp { try? FileManager.default.removeItem(at: tmp) } }
 
+        // The file's language is unknown: try the system language and English, keep the more confident result.
+        var ids = [Locale.current.identifier.replacingOccurrences(of: "_", with: "-"), "en-US", "tr-TR"]
+        ids = ids.enumerated().filter { ids.firstIndex(of: $0.element) == $0.offset }.map(\.element)
+        var best: (text: String, confidence: Double)?
+        var lastError: Error?
+        for id in ids.prefix(2) {
+            do {
+                let r = try recognizeSpeech(audio, locale: Locale(identifier: id))
+                if r.confidence > (best?.confidence ?? -1) { best = r }
+            } catch { lastError = error }
+        }
+        guard let text = best?.text, !text.isEmpty else { throw lastError ?? OrbitError("No speech found") }
+        let out = outputURL(for: url, tag: "Transcript", ext: "txt")
+        try text.write(to: out, atomically: true, encoding: .utf8)
+        return out
+    }
+
+    /// One recognition pass; confidence is the mean over the transcription's segments.
+    static func recognizeSpeech(_ audio: URL, locale: Locale) throws -> (text: String, confidence: Double) {
+        guard let rec = SFSpeechRecognizer(locale: locale), rec.isAvailable else { throw OrbitError("Speech recognition is not available") }
         let req = SFSpeechURLRecognitionRequest(url: audio)
         req.requiresOnDeviceRecognition = rec.supportsOnDeviceRecognition
         req.shouldReportPartialResults = false
         let sem = DispatchSemaphore(value: 0)
-        var text = "", failure: Error?
-        let task = rec.recognitionTask(with: req) { result, error in
-            if let result, result.isFinal { text = result.bestTranscription.formattedString; sem.signal() }
-            else if let error { failure = error; sem.signal() }
+        var result: SFSpeechRecognitionResult?, failure: Error?
+        let task = rec.recognitionTask(with: req) { r, error in
+            if let r, r.isFinal { result = r; sem.signal() } else if let error { failure = error; sem.signal() }
         }
         if sem.wait(timeout: .now() + 1800) == .timedOut { task.cancel(); throw OrbitError("Transcription timed out") }
-        if let failure, text.isEmpty { throw OrbitError(failure.localizedDescription) }
-        let out = outputURL(for: url, tag: "Transcript", ext: "txt")
-        try text.write(to: out, atomically: true, encoding: .utf8)
-        return out
+        guard let result else { throw OrbitError(failure?.localizedDescription ?? "No speech found") }
+        let segs = result.bestTranscription.segments
+        let conf = segs.isEmpty ? 0 : segs.map { Double($0.confidence) }.reduce(0, +) / Double(segs.count)
+        return (result.bestTranscription.formattedString, conf)
     }
 }
 
