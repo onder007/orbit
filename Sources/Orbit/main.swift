@@ -58,7 +58,8 @@ final class RingController {
         model.$status.sink { [weak self] s in if case .working = s { self?.isBusy = true } }.store(in: &bag)
 
         let size = NSSize(width: Ring.size, height: Ring.size)
-        let frame = NSRect(x: point.x - size.width / 2, y: point.y - size.height / 2, width: size.width, height: size.height)
+        let screen = NSScreen.screens.first { NSMouseInRect(point, $0.frame, false) } ?? NSScreen.main
+        let frame = Self.frame(around: point, size: size, in: screen?.visibleFrame ?? .infinite)
         let p = RingPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         p.isOpaque = false
         p.backgroundColor = .clear
@@ -98,6 +99,15 @@ final class RingController {
         }
     }
 
+    /// Centered on the point, shifted so the whole ring stays on screen (near the menu bar or a screen edge).
+    nonisolated static func frame(around p: NSPoint, size: NSSize, in visible: NSRect) -> NSRect {
+        var f = NSRect(x: p.x - size.width / 2, y: p.y - size.height / 2, width: size.width, height: size.height)
+        guard !visible.isInfinite else { return f }
+        f.origin.x = min(max(f.minX, visible.minX), visible.maxX - size.width)
+        f.origin.y = min(max(f.minY, visible.minY), visible.maxY - size.height)
+        return f
+    }
+
     /// Hides the ring while a prompt or editor window is up; the action keeps running.
     func hideForPrompt() {
         if let m = outsideClick { NSEvent.removeMonitor(m); outsideClick = nil }
@@ -130,6 +140,7 @@ enum Finder {
         """
         var err: NSDictionary?
         let r = NSAppleScript(source: src)?.executeAndReturnError(&err).stringValue ?? ""
+        if let err { NSLog("Orbit: Finder selection failed: %@", err) }
         return r.split(separator: "\n").map { URL(fileURLWithPath: String($0)) }
     }
 }

@@ -170,6 +170,11 @@ enum SelfTest {
             return tiff?[kCGImagePropertyTIFFArtist] as? String == "Test Author" || pngDict?[kCGImagePropertyPNGAuthor] as? String == "Test Author"
         }
 
+        check("ring stays on screen near the menu bar") {
+            let visible = NSRect(x: 0, y: 0, width: 1440, height: 875)
+            let f = RingController.frame(around: NSPoint(x: 1400, y: 898), size: NSSize(width: 480, height: 480), in: visible)
+            return visible.contains(f) && f.minX == 960 && f.maxY == 875
+        }
         // Hold-and-nudge trigger: the decision the drag watcher makes on each tick.
         check("ring trigger decisions") {
             let t0 = Date(), p0 = NSPoint(x: 500, y: 500)
