@@ -31,19 +31,27 @@ The ring opens on the category you used last for that file type.
 
 ## Install
 
+### Download
+
+1. Download the zip from the [latest release](https://github.com/onder007/orbit/releases/latest) and unzip it. It needs macOS 14 or later and runs on Apple silicon only.
+2. Move Orbit.app to `~/Applications` or `/Applications`.
+3. Orbit is ad-hoc signed and not notarized, so macOS blocks the first open. Open it once, then go to System Settings → Privacy & Security and choose Open Anyway. In Terminal instead, with the path you moved it to: `xattr -dr com.apple.quarantine ~/Applications/Orbit.app`
+
+### Build from source
+
 Requires macOS 14 or later and the Swift toolchain (Xcode Command Line Tools are enough).
 
 ```bash
 git clone https://github.com/onder007/orbit.git
 cd orbit
 ./scripts/bundle.sh
-cp -R Orbit.app ~/Applications/
+mkdir -p ~/Applications && cp -R Orbit.app ~/Applications/
 open ~/Applications/Orbit.app
 ```
 
-Orbit adds itself to Login Items on first launch. Video and audio actions use [ffmpeg](https://ffmpeg.org); Orbit looks for it in `~/.local/bin`, `/opt/homebrew/bin` and `/usr/local/bin`.
+Orbit adds itself to Login Items on first launch.
 
-The app is ad-hoc signed, not notarized. If Gatekeeper blocks it, open it once from Finder with right click → Open.
+Video and audio actions except Transcribe use [ffmpeg](https://ffmpeg.org), as does image to WebP. Transcribe on a video uses it to pull out the audio when it is installed. Orbit does not bundle it and looks in `~/.local/bin`, `/opt/homebrew/bin` and `/usr/local/bin`. Contact sheet also needs ffprobe in the same folder. Without ffmpeg the actions that use it show an error when used.
 
 ## Permissions
 
