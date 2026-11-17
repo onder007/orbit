@@ -163,7 +163,11 @@ enum MediaExtras {
         guard FileManager.default.fileExists(atPath: srt.path) else {
             throw OrbitError("Put \(srt.lastPathComponent) next to the video first")
         }
-        let escaped = srt.path.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: ":", with: "\\:")
+        // The filter argument breaks on some names (an apostrophe), so ffmpeg reads a copy with a plain name.
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".srt")
+        try FileManager.default.copyItem(at: srt, to: tmp)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let escaped = tmp.path.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: ":", with: "\\:")
             .replacingOccurrences(of: "'", with: "\\'")
         return try Media.video(url, tag: "Subtitled", vf: "subtitles='\(escaped)'")
     }

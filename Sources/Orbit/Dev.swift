@@ -245,6 +245,13 @@ enum SelfTest {
                 try "1\n00:00:00,000 --> 00:00:01,500\nHello\n".write(to: mov.deletingPathExtension().appendingPathExtension("srt"), atomically: true, encoding: .utf8)
                 return try action([mov], "subs")[0].pathExtension == "mp4"
             }
+            check("burn subtitles, apostrophe in the name") {
+                let named = root.appendingPathComponent("Don't stop.mp4")
+                try? FileManager.default.removeItem(at: named)
+                try FileManager.default.copyItem(at: mov, to: named)
+                try "1\n00:00:00,000 --> 00:00:01,500\nHello\n".write(to: named.deletingPathExtension().appendingPathExtension("srt"), atomically: true, encoding: .utf8)
+                return try action([named], "subs")[0].pathExtension == "mp4"
+            }
             // Same clip without an audio track, like a screen recording without a mic.
             let silent = root.appendingPathComponent("silent.mp4")
             _ = try? Proc.run(ff, ["-v", "error", "-y", "-i", mov.path, "-an", "-c:v", "copy", silent.path])
