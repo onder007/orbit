@@ -25,6 +25,7 @@ Outputs never overwrite anything: `photo.jpg` becomes `photo 50%.jpg`, then `pho
 
 - **Hold and nudge:** press a file in Finder or on the desktop, move it slightly and hold for a quarter second. A fast drag elsewhere is a normal file move and does not open the ring.
 - **Shift while dragging:** opens it at once.
+- **Press and hold:** with Finder in front, press and hold still for about half a second. The ring opens for the current Finder selection, whatever is under the cursor. The first use asks for permission to control Finder.
 - **⌥Space:** opens the ring for the current Finder selection. The first use asks for permission to control Finder.
 
 The ring opens on the category you used last for that file type.
@@ -57,9 +58,9 @@ Video and audio actions except Transcribe use [ffmpeg](https://ffmpeg.org), as d
 
 | Feature | Permission |
 |---|---|
-| ⌥Space | Automation → Finder (asked on first use) |
+| ⌥Space, press and hold | Automation → Finder (asked the first time you use ⌥Space or press and hold) |
 | Transcribe | Speech Recognition (asked on first use). Recognition runs on the device when the language supports it. |
-| Hold and nudge, Shift drag | None. Orbit watches the drag pasteboard, not your keyboard or mouse. |
+| Hold and nudge, Shift drag, press and hold | No Accessibility or Input Monitoring permission. Orbit reads the mouse button state, the cursor position, the Shift key and the drag pasteboard to detect a held file. |
 
 ## Command line
 
@@ -87,7 +88,7 @@ swift build
 
 ```
 Sources/Orbit/
-  main.swift      app, ring window, triggers (drag watcher, ⌥Space)
+  main.swift      app, ring window, triggers (drag watcher, press and hold, ⌥Space)
   RingView.swift  ring layout, hit testing, look
   Catalog.swift   which actions each file type gets
   Engines.swift   images, PDF, documents, ffmpeg
