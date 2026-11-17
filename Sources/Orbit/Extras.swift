@@ -268,7 +268,8 @@ enum FileOps {
         let dir = urls[0].deletingLastPathComponent()
         let base = urls.count == 1 ? urls[0].deletingPathExtension().lastPathComponent : "Archive"
         let out = outputURL(for: dir.appendingPathComponent(base), tag: nil, ext: "zip")
-        try Proc.run("/usr/bin/zip", ["-r", "-q", "-X", out.path] + urls.map(\.lastPathComponent), cwd: dir)
+        // "--" so a file named like an option ("-m") is stored, not read as one.
+        try Proc.run("/usr/bin/zip", ["-r", "-q", "-X", out.path, "--"] + urls.map(\.lastPathComponent), cwd: dir)
         return out
     }
 

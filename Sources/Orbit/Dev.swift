@@ -123,6 +123,15 @@ enum SelfTest {
             let dir = try action([z], "unzip")[0]
             return FileManager.default.fileExists(atPath: dir.appendingPathComponent("link.txt").path)
         }
+        check("zip a file named -m") {
+            let dir = root.appendingPathComponent("zip-dash")
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let files = ["-m", "a.txt", "b.txt"].map { dir.appendingPathComponent($0) }
+            for f in files { try "x".write(to: f, atomically: true, encoding: .utf8) }
+            let z = try action(files, "zip")[0]
+            let listed = try Proc.run("/usr/bin/unzip", ["-Z1", z.path]).split(separator: "\n")
+            return listed.contains("-m") && files.allSatisfy { FileManager.default.fileExists(atPath: $0.path) }
+        }
         check("rename") {
             let copy = root.appendingPathComponent("tmp-a.txt")
             try "x".write(to: copy, atomically: true, encoding: .utf8)
