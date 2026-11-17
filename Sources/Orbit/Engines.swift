@@ -337,9 +337,10 @@ enum Media {
         return ["\(home)/.local/bin/ffmpeg", "/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg"]
             .first { FileManager.default.isExecutableFile(atPath: $0) }
     }()
+    static let ffmpegMissing = OrbitError("ffmpeg was not found in ~/.local/bin, /opt/homebrew/bin or /usr/local/bin.")
 
     static func ffmpeg(_ url: URL, ext: String, tag: String?, _ args: [String]) throws -> URL {
-        guard let ff = ffmpegPath else { throw OrbitError("ffmpeg is needed for video and audio. Install it and try again.") }
+        guard let ff = ffmpegPath else { throw ffmpegMissing }
         let out = outputURL(for: url, tag: tag, ext: ext)
         do {
             try Proc.run(ff, ["-v", "error", "-y", "-i", url.path] + args + [out.path])
@@ -366,7 +367,7 @@ enum Media {
 
     /// Two passes: cropdetect finds the black bars, then crop with the most common value.
     static func autoCrop(_ url: URL) throws -> URL {
-        guard let ff = ffmpegPath else { throw OrbitError("ffmpeg is needed for video") }
+        guard let ff = ffmpegPath else { throw ffmpegMissing }
         let log = try Proc.run(ff, ["-hide_banner", "-i", url.path, "-vf", "cropdetect=limit=24:round=2:reset=0",
                                     "-frames:v", "240", "-an", "-f", "null", "-"])
         let crops = log.components(separatedBy: "crop=").dropFirst()

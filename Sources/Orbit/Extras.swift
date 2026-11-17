@@ -129,7 +129,8 @@ enum MediaExtras {
     }
 
     static func duration(_ url: URL) throws -> Double {
-        guard let fp = ffprobe else { throw OrbitError("ffprobe is needed") }
+        guard Media.ffmpegPath != nil else { throw Media.ffmpegMissing }
+        guard let fp = ffprobe else { throw OrbitError("ffprobe was not found next to ffmpeg.") }
         let out = try Proc.run(fp, ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", url.path])
         guard let d = Double(out.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: "\n").first ?? "") else {
             throw OrbitError("Could not read the duration")
