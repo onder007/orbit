@@ -87,6 +87,14 @@ swift build
 .build/debug/Orbit --preview photo.png ring.png 1 3   # render the ring for a file: segment 1, action 3 highlighted
 ```
 
+To package a release, run `./scripts/bundle.sh`, then:
+
+```bash
+ditto -c -k --norsrc --keepParent Orbit.app Orbit-<version>.zip
+```
+
+`--norsrc` keeps AppleDouble (`._*`) files out of the zip, so the signature still verifies after unzip.
+
 ```
 Sources/Orbit/
   main.swift      app, ring window, triggers (drag watcher, press and hold, ⌥Space)
