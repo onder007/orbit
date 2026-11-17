@@ -73,7 +73,8 @@ Action ids are in `Sources/Orbit/Catalog.swift`. Actions that ask for input, suc
 
 ## Limitations
 
-- Transcription tries the system language and English and keeps the more confident result; other languages need the system language set to them.
+- Text recognition (Copy Text and PDF OCR) is set to Turkish and English.
+- Transcription tries the system language and English and keeps the more confident result; other languages need the system language set to them. On a US English system the second language is Turkish.
 - Burn subtitles needs `name.srt` next to `name.mp4`.
 - PDF to DOCX, RTF and HTML carries the text only, not the layout.
 - Remove background needs a clear subject; it uses the Vision framework.
