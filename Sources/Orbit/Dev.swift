@@ -245,6 +245,16 @@ enum SelfTest {
                 try "1\n00:00:00,000 --> 00:00:01,500\nHello\n".write(to: mov.deletingPathExtension().appendingPathExtension("srt"), atomically: true, encoding: .utf8)
                 return try action([mov], "subs")[0].pathExtension == "mp4"
             }
+            // Same clip without an audio track, like a screen recording without a mic.
+            let silent = root.appendingPathComponent("silent.mp4")
+            _ = try? Proc.run(ff, ["-v", "error", "-y", "-i", mov.path, "-an", "-c:v", "copy", silent.path])
+            check("2x speed without audio") { (try MediaExtras.duration(action([silent], "speed2")[0])) < 1.5 }
+            check("failed ffmpeg run leaves no output") {
+                do { _ = try Media.ffmpeg(silent, ext: "mp4", tag: "Broken", ["-filter_complex", "[0:a]atempo=2.0[a]", "-map", "[a]"]) } catch {
+                    return !FileManager.default.fileExists(atPath: root.appendingPathComponent("silent Broken.mp4").path)
+                }
+                return false
+            }
         } else {
             print("SKIP video/audio: ffmpeg not found")
         }

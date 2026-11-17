@@ -221,7 +221,7 @@ enum Catalog {
             act("sheet", "Contact Sheet", "square.grid.3x3", MediaExtras.contactSheet),
             act("web", "Web Ready", "bolt") { try Media.ffmpeg($0, ext: "mp4", tag: "Web", ["-c", "copy", "-movflags", "+faststart"]) },
             act("speed2", "2x Speed", "forward") {
-                try Media.ffmpeg($0, ext: "mp4", tag: "2x", ["-filter_complex", "[0:v]setpts=0.5*PTS[v];[0:a]atempo=2.0[a]", "-map", "[v]", "-map", "[a]"] + Media.h264)
+                try Media.ffmpeg($0, ext: "mp4", tag: "2x", ["-vf", "setpts=0.5*PTS", "-af", "atempo=2.0"] + Media.h264)
             },
         ]),
     ]

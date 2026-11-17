@@ -341,7 +341,13 @@ enum Media {
     static func ffmpeg(_ url: URL, ext: String, tag: String?, _ args: [String]) throws -> URL {
         guard let ff = ffmpegPath else { throw OrbitError("ffmpeg is needed for video and audio. Install it and try again.") }
         let out = outputURL(for: url, tag: tag, ext: ext)
-        try Proc.run(ff, ["-v", "error", "-y", "-i", url.path] + args + [out.path])
+        do {
+            try Proc.run(ff, ["-v", "error", "-y", "-i", url.path] + args + [out.path])
+        } catch {
+            // A failed run can leave an empty output behind.
+            try? FileManager.default.removeItem(at: out)
+            throw error
+        }
         return out
     }
 
