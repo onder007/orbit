@@ -40,7 +40,14 @@ private func each(_ f: @escaping (URL) throws -> URL) -> ([URL]) throws -> [URL]
 private func eachMany(_ f: @escaping (URL) throws -> [URL]) -> ([URL]) throws -> [URL] {
     { files in
         var out: [URL] = []
-        for (i, u) in files.enumerated() { out += try f(u); RunProgress.report?(i + 1, files.count) }
+        do {
+            for (i, u) in files.enumerated() { out += try f(u); RunProgress.report?(i + 1, files.count) }
+        } catch {
+            // A later file failed: keep Undo for the outputs already written.
+            let done = out
+            DispatchQueue.main.async { MainActor.assumeIsolated { UndoStore.recordOutputs(done) } }
+            throw error
+        }
         return out
     }
 }

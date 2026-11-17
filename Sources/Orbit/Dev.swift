@@ -142,6 +142,23 @@ enum SelfTest {
             try "x".write(to: copy, atomically: true, encoding: .utf8)
             return try action([copy], "rename")[0].lastPathComponent == "renamed-1.txt"
         }
+        // Second file missing: the first one's result must stay undoable. Undo is recorded on the main queue.
+        let missing = root.appendingPathComponent("missing.png")
+        check("batch failure keeps undo for done files") {
+            do { _ = try action([png, missing], "to-jpg"); return false } catch {}
+            RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+            let label = MainActor.assumeIsolated { UndoStore.label } ?? ""
+            return label.hasPrefix("fixture ") && FileManager.default.fileExists(atPath: root.appendingPathComponent(label).path)
+        }
+        check("rename failure keeps undo for done files") {
+            let b = root.appendingPathComponent("tmp-b.txt")
+            try "x".write(to: b, atomically: true, encoding: .utf8)
+            do { _ = try action([b, missing], "rename"); return false } catch {}
+            RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+            guard MainActor.assumeIsolated({ UndoStore.label }) == "rename" else { return false }
+            MainActor.assumeIsolated { UndoStore.run() }
+            return FileManager.default.fileExists(atPath: b.path)
+        }
 
         check("pdf OCR") { try String(contentsOf: action([try action([words], "img-pdf")[0]], "pdf-ocr")[0], encoding: .utf8).contains("Orbit") }
         check("pdf lock + unlock") {

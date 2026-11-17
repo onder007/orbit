@@ -291,6 +291,19 @@ enum FileOps {
         let date = ISO8601DateFormatter.string(from: Date(), timeZone: .current, formatOptions: [.withFullDate])
         let width = String(urls.count).count
         var pairs: [(URL, URL)] = []
+        // Also on a failure part way, so the files already renamed can be renamed back.
+        defer {
+            let moves = pairs
+            if !moves.isEmpty {
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        UndoStore.record("rename") {
+                            for (from, to) in moves.reversed() where from != to { try? FileManager.default.moveItem(at: to, to: from) }
+                        }
+                    }
+                }
+            }
+        }
         for (i, u) in urls.enumerated() {
             let n = String(repeating: "0", count: max(0, width - String(i + 1).count)) + String(i + 1)
             let name = pattern.replacingOccurrences(of: "{name}", with: u.deletingPathExtension().lastPathComponent)
@@ -300,14 +313,6 @@ enum FileOps {
             if target != u, FileManager.default.fileExists(atPath: target.path) { target = outputURL(for: target, tag: nil, ext: u.pathExtension) }
             if target != u { try FileManager.default.moveItem(at: u, to: target) }
             pairs.append((u, target))
-        }
-        let moves = pairs
-        DispatchQueue.main.async {
-            MainActor.assumeIsolated {
-                UndoStore.record("rename") {
-                    for (from, to) in moves.reversed() where from != to { try? FileManager.default.moveItem(at: to, to: from) }
-                }
-            }
         }
         return pairs.map(\.1)
     }
