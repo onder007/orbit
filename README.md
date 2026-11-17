@@ -40,7 +40,7 @@ The ring opens on the category you used last for that file type.
 
 ### Build from source
 
-Requires macOS 14 or later and the Swift toolchain (Xcode Command Line Tools are enough).
+Requires macOS 14 or later and the Swift toolchain (Xcode Command Line Tools are enough). CI builds it with Swift 6.1.
 
 ```bash
 git clone https://github.com/onder007/orbit.git

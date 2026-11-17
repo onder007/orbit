@@ -1,0 +1,18 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    # The oldest hosted macOS image: its Swift 6.1 is the oldest toolchain the build is checked with.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - run: swift build
+      - run: .build/debug/Orbit --selftest
