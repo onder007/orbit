@@ -69,7 +69,7 @@ Orbit.app/Contents/MacOS/Orbit --run to-webp photo.png    # run one action by id
 Orbit.app/Contents/MacOS/Orbit --selftest                 # build fixtures and test every engine
 ```
 
-Action ids are in `Sources/Orbit/Catalog.swift`.
+Action ids are in `Sources/Orbit/Catalog.swift`. Actions that ask for input, such as a password or a page range, are not available through `--run`.
 
 ## Limitations
 
