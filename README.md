@@ -4,7 +4,7 @@ A ring menu for files on macOS. Pick up a file in Finder and hold it for a momen
 
 Everything runs on your Mac. No uploads, no accounts.
 
-![Orbit ring for an image](docs/ring.png)
+![Orbit ring for an image file, Design category open](docs/ring.png)
 
 ## What it does
 
@@ -19,7 +19,7 @@ The inner ring holds categories, the outer ring the actions of the category unde
 | Audio | MP3, M4A, WAV, FLAC, AIFF, OGG · normalize, trim, trim silence, transcribe, mono, fade |
 | Any file | ZIP, batch rename (`{name}`, `{n}`, `{date}`) · unzip for `.zip` |
 
-Outputs never overwrite anything: `photo.jpg` becomes `photo 50%.jpg`, then `photo 50% 2.jpg` and so on. The menu bar item has **Undo**, which moves the last outputs to the Trash or reverts the last rename.
+Outputs get a new name and existing files are kept: `photo.jpg` becomes `photo 50%.jpg`, then `photo 50% 2.jpg` and so on. The menu bar item has **Undo**, which moves the last outputs to the Trash or reverts the last rename.
 
 ## Opening the ring
 
