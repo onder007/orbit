@@ -11,6 +11,8 @@ enum Ask {
             guard let v = answer(title) else { throw OrbitError("Cancelled") }
             return v
         }
+        // On the main thread (`--run`) the main.sync below would crash.
+        if Thread.isMainThread { throw OrbitError("This action asks for input; use it from the ring") }
         var result: String?
         DispatchQueue.main.sync {
             MainActor.assumeIsolated { RingController.shared.hideForPrompt() }

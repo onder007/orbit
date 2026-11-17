@@ -85,6 +85,11 @@ enum SelfTest {
             return try String(contentsOf: action([p], "pdf-txt")[0], encoding: .utf8).contains("Orbit")
         }
 
+        check("prompt on the main thread throws") {
+            do { _ = try Ask.text("Trim", "") } catch { return error.localizedDescription.contains("asks for input") }
+            return false
+        }
+
         // Prompts answered without UI.
         Ask.answer = { title in
             switch title {
