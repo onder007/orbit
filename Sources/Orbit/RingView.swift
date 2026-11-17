@@ -45,7 +45,12 @@ final class RingModel: ObservableObject {
         let n = segments[activeSegment].actions.count
         let step = min(38, 330 / Double(max(n, 1)))
         let first = segmentCenter(activeSegment) - step * Double(n) / 2
-        return (0..<n).map { (first + step * Double($0), first + step * Double($0 + 1)) }
+        // Typed sub-expressions: Swift 6.1 cannot type-check this as one expression.
+        return (0..<n).map { i -> (start: Double, end: Double) in
+            let start: Double = first + step * Double(i)
+            let end: Double = first + step * Double(i + 1)
+            return (start, end)
+        }
     }
 
     func hit(_ p: CGPoint, in size: CGSize) {
